@@ -13,7 +13,7 @@ import Test.MuCheck.AnalysisSummary (MAnalysisSummary (..))
 import Test.MuCheck.Config (MuVar (..), defaultConfig)
 import Test.MuCheck.Interpreter (MutantSummary (..), evalTest, evaluateMutants)
 import Test.MuCheck.Mutation (genMutants, genMutantsForSrc, getAllTests)
-import Test.MuCheck.TestAdapter (InterpreterOutput (..), Mutant (..), Summarizable (..), Summary, TRun (..))
+import Test.MuCheck.TestAdapter (InterpreterOutput(..), Mutant(..), Summarizable(..), TRun(..))
 import Test.MuCheck.TestAdapter.AssertCheckAdapter
 import Test.MuCheck.Utils.Common (hash)
 import Test.MuCheck.Utils.Print
@@ -130,24 +130,24 @@ main = do
 
 runOpts :: Opts -> IO ()
 runOpts opts
-    | optDryRun opts = dryRun (optFile opts)
-    | otherwise = do
-        when (optNoop opts) $ noopCheck (optFile opts)
-        let modFile = toRun (optFile opts) :: AssertCheckRun
-        (len, mutants) <- genMutants (getName modFile) (optTix opts)
-        smutants <- sampler defaultConfig mutants
-        let finalMutants = applyDisableEnable (optDisable opts) (optEnable opts) smutants
-            tests = map (genTest modFile)
-        testNames <- getAllTests (getName modFile)
-        let timeoutUs = fmap (* 1000000) (optTimeout opts)
-        (fsum', tsum) <- evaluateMutants timeoutUs modFile finalMutants (tests testNames)
-        let msum = case len of
-                -1 -> fsum'{_maCoveredNumMutants = -1}
-                _ -> fsum'{_maCoveredNumMutants = length mutants}
-        printMutantDetails opts tsum
-        print msum
-        printMutatorBreakdown opts tsum
-        applyExitPolicy opts msum
+  | optDryRun opts = dryRun (optFile opts)
+  | otherwise      = do
+      when (optNoop opts) $ noopCheck (optFile opts)
+      let modFile = toRun (optFile opts) :: AssertCheckRun
+      (len, mutants) <- genMutants (getName modFile) (optTix opts)
+      smutants        <- sampler defaultConfig mutants
+      let finalMutants = applyDisableEnable (optDisable opts) (optEnable opts) smutants
+          tests        = map (genTest modFile)
+      testNames <- getAllTests (getName modFile)
+      let timeoutUs = fmap (* 1000000) (optTimeout opts)
+      (fsum', tsum) <- evaluateMutants timeoutUs modFile finalMutants (tests testNames)
+      let msum = case len of
+                   -1 -> fsum' { _maCoveredNumMutants = -1 }
+                   _  -> fsum' { _maCoveredNumMutants = length mutants }
+      printMutantDetails opts tsum
+      print msum
+      printMutatorBreakdown opts tsum
+      applyExitPolicy opts msum
 
 noopCheck :: FilePath -> IO ()
 noopCheck file = do
@@ -165,71 +165,66 @@ noopCheck file = do
 
 applyExitPolicy :: Opts -> MAnalysisSummary -> IO ()
 applyExitPolicy opts msum = do
-    let noerrors = _maNumMutants msum - _maErrors msum
-        msi
-            | noerrors > 0 = _maKilled msum * 100 `div` noerrors
-            | otherwise = 0
-
-        -- Covered MSI is calculated using the covered mutants as the baseline.
-        -- Since _maNumMutants is bounded by _maCoveredNumMutants if coverage is used,
-        -- we can use the same `noerrors` if it's based on _maCoveredNumMutants, but
-        -- effectively the mutants tested ARE the covered ones when a tix file is provided.
-        -- If -tix is not provided, _maCoveredNumMutants is -1.
-        coveredNoerrors =
-            if _maCoveredNumMutants msum > 0
-                then _maCoveredNumMutants msum - _maErrors msum
-                else noerrors
-        coveredMsi
-            | coveredNoerrors > 0 = _maKilled msum * 100 `div` coveredNoerrors
-            | otherwise = 0
-
-    if optIgnoreMsiNoMutations opts && _maNumMutants msum == 0
-        then return ()
-        else do
-            case optMinMsi opts of
-                Just threshold | msi < threshold -> do
-                    putStrLn $ "MSI " ++ show msi ++ "% is below threshold " ++ show threshold ++ "%"
-                    exitWith (ExitFailure 5)
-                _ -> return ()
-
-            case optMinCoveredMsi opts of
-                Just threshold | coveredMsi < threshold -> do
-                    putStrLn $ "Covered-MSI " ++ show coveredMsi ++ "% is below threshold " ++ show threshold ++ "%"
-                    exitWith (ExitFailure 5)
-                _ -> return ()
-
-    when (optFailOnEscape opts && _maAlive msum > 0) $ do
-        putStrLn $ show (_maAlive msum) ++ " mutant(s) survived; exiting with failure"
-        exitWith (ExitFailure 4)
+  let noerrors = _maNumMutants msum - _maErrors msum
+      msi | noerrors > 0 = _maKilled msum * 100 `div` noerrors
+          | otherwise    = 0
+      
+      -- Covered MSI is calculated using the covered mutants as the baseline.
+      -- Since _maNumMutants is bounded by _maCoveredNumMutants if coverage is used,
+      -- we can use the same `noerrors` if it's based on _maCoveredNumMutants, but 
+      -- effectively the mutants tested ARE the covered ones when a tix file is provided.
+      -- If -tix is not provided, _maCoveredNumMutants is -1.
+      coveredNoerrors = if _maCoveredNumMutants msum > 0 
+                        then _maCoveredNumMutants msum - _maErrors msum
+                        else noerrors
+      coveredMsi | coveredNoerrors > 0 = _maKilled msum * 100 `div` coveredNoerrors
+                 | otherwise           = 0
+  
+  if optIgnoreMsiNoMutations opts && _maNumMutants msum == 0 then return ()
+  else do
+    case optMinMsi opts of
+      Just threshold | msi < threshold -> do
+        putStrLn $ "MSI " ++ show msi ++ "% is below threshold " ++ show threshold ++ "%"
+        exitWith (ExitFailure 5)
+      _ -> return ()
+      
+    case optMinCoveredMsi opts of
+      Just threshold | coveredMsi < threshold -> do
+        putStrLn $ "Covered-MSI " ++ show coveredMsi ++ "% is below threshold " ++ show threshold ++ "%"
+        exitWith (ExitFailure 5)
+      _ -> return ()
+  
+  when (optFailOnEscape opts && _maAlive msum > 0) $ do
+    putStrLn $ show (_maAlive msum) ++ " mutant(s) survived; exiting with failure"
+    exitWith (ExitFailure 4)
 
 printMutatorBreakdown :: Opts -> [MutantSummary] -> IO ()
 printMutatorBreakdown _ [] = return ()
-printMutatorBreakdown opts sums = do
-    let mutOf (MSumError m _ _) = m
-        mutOf (MSumAlive m _) = m
-        mutOf (MSumKilled m _) = m
-        mutOf (MSumOther m _) = m
-        isKilled (MSumKilled _ _) = True; isKilled _ = False
-        isAlive (MSumAlive _ _) = True; isAlive _ = False
-        isErr (MSumError _ _ _) = True; isErr _ = False
-        mutype = showMuVar . _mtype . mutOf
-        types = sort . nub $ map mutype sums
-        row t =
-            let ts = filter ((== t) . mutype) sums
-                k = length $ filter isKilled ts
-                a = length $ filter isAlive ts
-                e = length $ filter isErr ts
-             in (t, k, a, e)
-        rows = map row types
-        colW = max 8 $ maximum $ map (\(t, _, _, _) -> length t) rows
-        pad s = s ++ replicate (colW - length s + 2) ' '
-        sep = replicate (colW + 32) '-'
-        fmtN n = replicate (max 0 (6 - length (show n))) ' ' ++ show n
-    putStrLn ""
-    putStrLn $ "  " ++ pad "Mutator" ++ "  Killed   Alive  Errors"
-    putStrLn sep
-    mapM_ (\(t, k, a, e) -> putStrLn $ "  " ++ pad t ++ "  " ++ fmtN k ++ "  " ++ fmtN a ++ "  " ++ fmtN e) rows
-    putStrLn sep
+printMutatorBreakdown _opts sums = do
+  let mutOf (MSumError m _ _) = m
+      mutOf (MSumAlive m _)   = m
+      mutOf (MSumKilled m _)  = m
+      mutOf (MSumOther m _)   = m
+      isKilled (MSumKilled _ _)  = True; isKilled _ = False
+      isAlive  (MSumAlive  _ _)  = True; isAlive  _ = False
+      isErr    (MSumError _ _ _) = True; isErr    _ = False
+      mutype   = showMuVar . _mtype . mutOf
+      types    = sort . nub $ map mutype sums
+      row t    = let ts = filter ((== t) . mutype) sums
+                     k  = length $ filter isKilled ts
+                     a  = length $ filter isAlive  ts
+                     e  = length $ filter isErr    ts
+                 in (t, k, a, e)
+      rows     = map row types
+      colW     = max 8 $ maximum $ map (\(t,_,_,_) -> length t) rows
+      pad s    = s ++ replicate (colW - length s + 2) ' '
+      sep      = replicate (colW + 32) '-'
+      fmtN n   = replicate (max 0 (6 - length (show n))) ' ' ++ show n
+  putStrLn ""
+  putStrLn $ "  " ++ pad "Mutator" ++ "  Killed   Alive  Errors"
+  putStrLn sep
+  mapM_ (\(t,k,a,e) -> putStrLn $ "  " ++ pad t ++ "  " ++ fmtN k ++ "  " ++ fmtN a ++ "  " ++ fmtN e) rows
+  putStrLn sep
 
 printMutantDetails :: Opts -> [MutantSummary] -> IO ()
 printMutantDetails opts sums = do
@@ -241,36 +236,27 @@ printMutantDetails opts sums = do
                 MSumError _ _ _ -> 'e' `elem` chars
                 MSumOther _ _ -> 'k' `elem` chars
 
-        shouldShowQuiet s =
-            if optQuiet opts
-                then case s of
-                    MSumAlive _ _ -> True
-                    _ -> False
-                else True
-
-        toShow = filter (\s -> filterStatuses s && shouldShowQuiet s) sums
-
-    forM_ toShow $ \s -> do
-        let (status, m@Mutant{..}, logS, mErr) = case s of
-                MSumKilled mut l -> ("KILLED", mut, l, Nothing)
-                MSumAlive mut l -> ("ALIVE", mut, l, Nothing)
-                MSumError mut e l -> ("ERROR", mut, l, Just e)
-                MSumOther mut l -> ("OTHER", mut, l, Nothing)
-
-        unless (optQuiet opts && not (optVerbose opts) && not (optDebug opts) && status /= "ALIVE") $ do
-            when (optVerbose opts || optDebug opts || status == "ALIVE" || not (optQuiet opts)) $ do
-                putStrLn $ ">>> Mutant " ++ hash _mutant ++ " [" ++ status ++ "] " ++ showMuVar _mtype
-                when (optVerbose opts) $ do
-                    unless (optNoDiffs opts) $ do
-                        putStrLn "--- Source ---"
-                        putStrLn _mutant
-                        putStrLn "--------------"
-                    mapM_ print logS
-                when (optDebug opts) $ do
-                    case mErr of
-                        Just e -> putStrLn $ "Error: " ++ e
-                        _ -> return ()
-                putStrLn ""
+  forM_ toShow $ \s -> do
+    let (status, Mutant{..}, logS, mErr) = case s of
+                                     MSumKilled mut l -> ("KILLED", mut, l, Nothing)
+                                     MSumAlive mut l -> ("ALIVE", mut, l, Nothing)
+                                     MSumError mut e l -> ("ERROR", mut, l, Just e)
+                                     MSumOther mut l -> ("OTHER", mut, l, Nothing)
+    
+    unless (optQuiet opts && not (optVerbose opts) && not (optDebug opts) && status /= "ALIVE") $ do
+      when (optVerbose opts || optDebug opts || status == "ALIVE" || not (optQuiet opts)) $ do
+        putStrLn $ ">>> Mutant " ++ hash _mutant ++ " [" ++ status ++ "] " ++ showMuVar _mtype
+        when (optVerbose opts) $ do
+          unless (optNoDiffs opts) $ do
+            putStrLn "--- Source ---"
+            putStrLn _mutant 
+            putStrLn "--------------"
+          mapM_ print logS
+        when (optDebug opts) $ do
+          case mErr of
+            Just e -> putStrLn $ "Error: " ++ e
+            _ -> return ()
+        putStrLn ""
 
 dryRun :: FilePath -> IO ()
 dryRun file = do

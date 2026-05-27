@@ -3,6 +3,9 @@
 -- | SYB functions
 module Test.MuCheck.Utils.Syb (relevantOps, once) where
 
+import Data.Generics (Data, GenericM, gmapMo, mkQ)
+import Test.MuCheck.MuOp (mkMpMuOp, MuOp, same)
+import Test.MuCheck.Config (MuVar)
 import Control.Monad (MonadPlus, mplus, mzero)
 import Data.Generics (Data, GenericM, Typeable, gmapMo, mkQ)
 import Data.Maybe (isJust)
