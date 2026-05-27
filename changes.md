@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.9]
+  * Fix bug in `PrimChar` mutation where it incorrectly used the `Char` constructor
+  * Refine `replace-mutable-arg` mutator to avoid matching common single-letter variables like `r`, `m`, and `t`
+  * Fix compilation warnings regarding partial functions (`head`), non-exhaustive patterns, and redundant `Typeable` deriving
+  * Refactor `stopFast` to stop on the first interpreter error, preventing redundant attempts
+  * Improve `fullSummary` and `summarizeResults` to robustly handle multiple test results without relying on `last`
+
 ## [0.4.8]
   * Add Dependabot configuration for GitHub Actions and Cabal dependencies
   * Add an OSV-Scanner vulnerability scanning workflow to CI

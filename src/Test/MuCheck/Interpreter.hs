@@ -23,7 +23,7 @@ data MutantSummary = MSumError Mutant String [Summary]         -- ^ Capture the 
                    | MSumAlive Mutant [Summary]                -- ^ The mutant was alive
                    | MSumKilled Mutant [Summary]               -- ^ The mutant was kileld
                    | MSumOther Mutant [Summary]                -- ^ Undetermined - we will treat it as killed as it is not a success.
-                   deriving (Show, Typeable)
+                   deriving (Show)
 
 -- | Given the list of tests suites to check, run the test suite on mutants.
 evaluateMutants :: (Show b, Summarizable b, TRun a b) =>
@@ -45,13 +45,14 @@ summarizeResults :: (Summarizable s, TRun a s) =>
   -> [TestStr]                                                    -- ^ Tests we used to run analysis
   -> (Mutant, [InterpreterOutput s])                              -- ^ The mutant and its corresponding output of test runs.
   -> MutantSummary                                                -- ^ Returns a summary of the run for the mutant
-summarizeResults m tests (mutant, ioresults) = case last results of -- the last result should indicate status because we dont run if there is error.
-  Left err -> MSumError mutant (show err) logS
-  Right out -> myresult out
-  where results = map _io ioresults
-        myresult out | isSuccess out = MSumAlive mutant logS
-                     | isFailure out = MSumKilled mutant logS
-                     | otherwise     = MSumOther mutant logS
+summarizeResults m tests (mutant, ioresults) = 
+  case [e | Io (Left e) _ <- ioresults] of
+    (err:_) -> MSumError mutant (show err) logS
+    [] -> if any isKilled ioresults
+            then MSumKilled mutant logS
+            else MSumAlive mutant logS
+  where isKilled (Io (Right x) _) = isFailure x
+        isKilled _ = False
         logS :: [Summary]
         logS = zipWith (summarize mutant) tests ioresults
         summarize = summarize_ m
@@ -86,10 +87,7 @@ stopFast fn (x:xs) = do
   v <- fn x
   case _io v of
     Left r -> do  say (showE r)
-                  -- do not append results of the run because mutant was non viable unless it was the last
-                  if null xs
-                    then return [v]
-                    else stopFast fn xs
+                  return [v]
     Right out -> if isSuccess out
       then (v :) <$> stopFast fn xs
       else return [v] -- test failed (mutant detected)
@@ -97,7 +95,7 @@ stopFast fn (x:xs) = do
 -- | Show error
 showE :: I.InterpreterError -> String
 showE (I.UnknownError e) = "Unknown: " ++ e
-showE (I.WontCompile e) = "Compile: " ++ show (head e)
+showE (I.WontCompile e) = "Compile: " ++ show e
 showE (I.NotAllowed e) = "Not Allowed: " ++ e
 showE (I.GhcException e) = "GhcException: " ++ e
 
@@ -147,8 +145,13 @@ fullSummary m _tests results = MAnalysisSummary {
   _maKilled = length fails,
   _maErrors= length errors}
   where res = map (map _io) results
-        lasts = map last res -- get the last test runs
-        (errors, completed) = partitionEithers lasts
-        fails = filter (failure_ m) completed -- look if others failed or not
-        alive = filter (success_ m) completed
+        -- A mutant is an error if any test resulted in an error
+        (errors, completed) = partitionEithers $ map findError res
+        findError r = case [e | Left e <- r] of
+                        (e:_) -> Left e
+                        []    -> Right [x | Right x <- r]
+        -- A mutant is killed if any test failed
+        fails = filter (any (failure_ m)) completed
+        -- A mutant is alive if all tests succeeded
+        alive = filter (all (success_ m)) completed
 

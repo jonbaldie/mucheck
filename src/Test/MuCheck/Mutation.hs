@@ -251,7 +251,7 @@ selectLitOps m = selectValOps isLit convert m
         convert (Int l i _) = map (apX (Int l)) $ nub [i + 1, i - 1, 0, 1]
         convert (PrimInt l i _) = map (apX (PrimInt l)) $ nub [i + 1, i - 1, 0, 1]
         convert (Char l c _) = map (apX (Char l)) [pred c, succ c]
-        convert (PrimChar l c _) = map (apX (Char l)) [pred c, succ c]
+        convert (PrimChar l c _) = map (apX (PrimChar l)) [pred c, succ c]
         convert (Frac l f _) = map (apX (Frac l)) $ nub [f + 1.0, f - 1.0, 0.0, 1.1]
         convert (PrimFloat l f _) = map (apX (PrimFloat l)) $ nub [f + 1.0, f - 1.0, 0.0, 1.0]
         convert (PrimDouble l f _) = map (apX (PrimDouble l)) $ nub [f + 1.0, f - 1.0, 0.0, 1.0]
@@ -642,7 +642,7 @@ selectErrorGuardOps m = selectValOps isErrorOp convert m
 -- | Replace @IORef@/@MVar@/@TVar@ arguments with @undefined@
 selectReplaceMutableArgOps :: Module_ -> [MuOp]
 selectReplaceMutableArgOps m = selectValOps isMutableVar convert m
-  where isMutableVar (Var _ (UnQual _ (Ident _ n))) | n `elem` ["r", "m", "t", "ref", "mvar", "tvar"] = True
+  where isMutableVar (Var _ (UnQual _ (Ident _ n))) | n `elem` ["ref", "mvar", "tvar", "ior", "stref"] = True
         isMutableVar _ = False
         convert :: Exp_ -> [Exp_]
         convert (Var l _) = [Var l (UnQual l (Ident l "undefined"))]

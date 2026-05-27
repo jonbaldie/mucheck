@@ -2,7 +2,7 @@
 -- | SYB functions
 module Test.MuCheck.Utils.Syb (relevantOps, once) where
 
-import Data.Generics (Data, GenericM, gmapMo, mkQ, Typeable)
+import Data.Generics (Data, GenericM, gmapMo, mkQ)
 import Test.MuCheck.MuOp (mkMpMuOp, MuOp, same)
 import Test.MuCheck.Config (MuVar)
 import Control.Monad (MonadPlus, mplus, mzero)

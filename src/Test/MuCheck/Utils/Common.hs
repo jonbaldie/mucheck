@@ -50,8 +50,8 @@ rSampleF n t = do g <- genRandomSeed
 
 -- | The `remElt` function removes element at index specified from a list
 remElt :: Int -> [a] -> [a]
-remElt idx xs = front ++ ack
-  where (front,_:ack) = splitAt idx xs
+remElt idx xs = front ++ drop 1 ack
+  where (front,ack) = splitAt idx xs
 
 -- | The `swapElts` function swaps two elements in a list given their indices
 swapElts :: Int -> Int -> [t] -> [t]
@@ -63,7 +63,7 @@ swapElts i j ls = [get k x | (k, x) <- zip [0..length ls - 1] ls]
 -- | The `genSwapped` generates a list of lists where each element has been
 -- swapped by another
 genSwapped :: [t] -> [[t]]
-genSwapped lst = map (\(x:y:_) -> swapElts x y lst) swaplst
+genSwapped lst = [swapElts x y lst | (x:y:_) <- swaplst]
   where swaplst = choose [0..length lst - 1] 2
 
 -- | Generate a random seed from the time.

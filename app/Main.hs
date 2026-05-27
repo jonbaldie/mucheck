@@ -12,7 +12,7 @@ import Test.MuCheck.AnalysisSummary (MAnalysisSummary(..))
 import Test.MuCheck.Config (MuVar(..), defaultConfig)
 import Test.MuCheck.Interpreter (MutantSummary(..), evalTest, evaluateMutants)
 import Test.MuCheck.Mutation (genMutants, genMutantsForSrc, getAllTests)
-import Test.MuCheck.TestAdapter (InterpreterOutput(..), Mutant(..), Summarizable(..), TRun(..), Summary)
+import Test.MuCheck.TestAdapter (InterpreterOutput(..), Mutant(..), Summarizable(..), TRun(..))
 import Test.MuCheck.TestAdapter.AssertCheckAdapter
 import Test.MuCheck.Utils.Print
 import Test.MuCheck.Utils.Common (hash)
@@ -197,7 +197,7 @@ applyExitPolicy opts msum = do
 
 printMutatorBreakdown :: Opts -> [MutantSummary] -> IO ()
 printMutatorBreakdown _ [] = return ()
-printMutatorBreakdown opts sums = do
+printMutatorBreakdown _opts sums = do
   let mutOf (MSumError m _ _) = m
       mutOf (MSumAlive m _)   = m
       mutOf (MSumKilled m _)  = m
@@ -242,7 +242,7 @@ printMutantDetails opts sums = do
       toShow = filter (\s -> filterStatuses s && shouldShowQuiet s) sums
 
   forM_ toShow $ \s -> do
-    let (status, m@Mutant{..}, logS, mErr) = case s of
+    let (status, Mutant{..}, logS, mErr) = case s of
                                      MSumKilled mut l -> ("KILLED", mut, l, Nothing)
                                      MSumAlive mut l -> ("ALIVE", mut, l, Nothing)
                                      MSumError mut e l -> ("ERROR", mut, l, Just e)
