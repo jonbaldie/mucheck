@@ -17,4 +17,4 @@ jobs:
       - name: Install homplexity
         run: cabal install homplexity
       - name: Run homplexity check
-        run: ~/.cabal/bin/homplexity src app test Examples
+        run: ~/.cabal/bin/homplexity-cli src app test Examples
