@@ -141,7 +141,6 @@ fullSummary :: (Show b, Summarizable b, TRun a b) =>
   -> [[InterpreterOutput b]]                -- ^ The test ouput (per mutant, (per test))
   -> MAnalysisSummary                       -- ^ Returns the full summary of the run
 fullSummary m _tests results = MAnalysisSummary {
-  _maOriginalNumMutants = -1,
   _maCoveredNumMutants = -1,
   _maNumMutants = length results,
   _maAlive = length alive,

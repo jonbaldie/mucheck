@@ -32,8 +32,8 @@ mucheck moduleFile tix = do
   -- set the original size of mutants. (We report the results based on original
   -- number of mutants, not just the covered ones.)
   let fsum = case len of
-              -1 -> fsum' {_maOriginalNumMutants = -1, _maCoveredNumMutants = -1}
-              _  -> fsum' {_maOriginalNumMutants = len, _maCoveredNumMutants = length mutants}
+       -1 -> fsum' { _maCoveredNumMutants = -1 }
+       _  -> fsum' { _maCoveredNumMutants = length mutants }
   return (fsum, msum)
 
 -- | Wrapper around sampleF that returns correct sampling ratios according to

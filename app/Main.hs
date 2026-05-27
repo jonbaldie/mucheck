@@ -139,8 +139,8 @@ runOpts opts
       let timeoutUs = fmap (* 1000000) (optTimeout opts)
       (fsum', tsum) <- evaluateMutants timeoutUs modFile finalMutants (tests testNames)
       let msum = case len of
-                   -1 -> fsum' { _maOriginalNumMutants = -1, _maCoveredNumMutants = -1 }
-                   _  -> fsum' { _maOriginalNumMutants = len, _maCoveredNumMutants = length mutants }
+                   -1 -> fsum' { _maCoveredNumMutants = -1 }
+                   _  -> fsum' { _maCoveredNumMutants = length mutants }
       printMutantDetails opts tsum
       print msum
       printMutatorBreakdown opts tsum
@@ -162,8 +162,7 @@ noopCheck file = do
 
 applyExitPolicy :: Opts -> MAnalysisSummary -> IO ()
 applyExitPolicy opts msum = do
-  let noerrors = max (max (_maOriginalNumMutants msum) (_maCoveredNumMutants msum))
-                     (_maNumMutants msum) - _maErrors msum
+  let noerrors = _maNumMutants msum - _maErrors msum
       msi | noerrors > 0 = _maKilled msum * 100 `div` noerrors
           | otherwise    = 0
       
