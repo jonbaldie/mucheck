@@ -125,12 +125,12 @@
   - [x] Rewrite `Utils/Helpers.hs`: `prettyPrint` → `showSDocUnsafe . ppr`
   - [x] Rewrite `Mutation.hs` core: `getASTFromStr` using `parseModuleFromString` from `ghc-exactprint`; `exactPrint` for mutant serialisation; all structural helpers (`getModuleName`, `getDecl`/`putDecl`, `functionName`, `pragmaName`, `getAnn`) updated for GHC AST
   - [x] Rewrite all 22 `selectXxxOps` functions in `Mutation.hs` for GHC 9.12 AST constructors (`HsApp`, `OpApp`, `HsLit`, `HsOverLit`, `FunBind`, `HsCase`, `HsDo`, `HsLet`, `HsIf`, `GRHS`, `Match`, etc.); guard mutations promoted to `Alt_`-level; `noExtField` for `NoExtField` extension fields
-  - [ ] Fix `app/Main.hs` and all callers: `getASTFromStr` is now `IO`; `allTests` signature change; update `app/Main.hs` call sites and `genMutantsForSrc` usages throughout the app
-  - [ ] Update test files: `MutationSpec.hs`, `SybSpec.hs`, `MutationSpec/Helpers.hs` — remove `Language.Haskell.Exts` imports, update AST constructor patterns and hand-built AST values to GHC equivalents
-  - [ ] `cabal build all` and `cabal test all --test-show-details=direct` green (all 24 tests pass)
-  - [ ] Remove `haskell-src-exts` from `MuCheck.cabal`; confirm build still clean
-  - [ ] Smoke test: `cabal build --write-ghc-environment-files=always all && cabal run mucheck -- Examples/AssertCheckTest.hs`; kill count must not drop vs baseline on `master`
-  - [ ] Update `README.md` to note full GHC extension support; add `changes.md` entry; `cabal haddock all` with no new undocumented-export warnings; PR to `master`
+  - [x] Fix `app/Main.hs` and all callers: `getASTFromStr` is now `IO`; `allTests` signature change; update `app/Main.hs` call sites and `genMutantsForSrc` usages throughout the app
+  - [x] Update test files: `MutationSpec.hs`, `SybSpec.hs`, `MutationSpec/Helpers.hs` — remove `Language.Haskell.Exts` imports, update AST constructor patterns and hand-built AST values to GHC equivalents
+  - [x] `cabal build all` and `cabal test all --test-show-details=direct` green (all 24 tests pass)
+  - [x] Remove `haskell-src-exts` from `MuCheck.cabal`; confirm build still clean
+  - [x] Smoke test: `cabal build --write-ghc-environment-files=always all && cabal run mucheck -- Examples/AssertCheckTest.hs`; kill count must not drop vs baseline on `master`
+  - [x] Update `README.md` to note full GHC extension support; add `changes.md` entry; `cabal haddock all` with no new undocumented-export warnings; PR to `master`
 
 - [x] Decompose `app/Main.hs` (currently 1,185 lines) into focused sub-modules: `App.CLI` for option type and parsing, `App.Config` for YAML loading and config merging, `App.Filter` for the eight filter stages (`applyDisableEnable`, `applyAnnotations`, `applyBaseline`, `applyBlacklist`, `applyDiffLines`, `applyIgnoreLines`, `applyRunMutantId`, `capMutants`), `App.Output` (or one module per format) for the five loggers plus diff and breakdown, `App.Worker` for the subprocess parallelism and wire protocol, and `App.Exit` for exit-code policy; `Main.hs` itself should reduce to wiring these modules together inside `main`
 

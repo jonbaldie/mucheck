@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -11,12 +12,11 @@ import Data.List (isPrefixOf, nub, nubBy, partition, permutations)
 -- In GHC 9.12, LHsBindsLR GhcPs GhcPs = [LHsBind GhcPs] (plain list, not Bag)
 
 import GHC.Hs
-import GHC.Parser.Annotation
-    ( NoAnn (..), EpAnn, LocatedA, HasLoc (..)
-    )
+import GHC.Parser.Annotation ()
 import GHC.Types.SrcLoc
-    ( GenLocated (..), Located, SrcSpan (..)
-    , unLoc, getLoc
+    ( GenLocated (..)
+    , generatedSrcSpan
+    , unLoc
     )
 import GHC.Types.Name.Reader
     ( RdrName (..), rdrNameOcc, mkRdrUnqual )
@@ -26,14 +26,15 @@ import GHC.Types.SourceText
     ( SourceText (..), IntegralLit (..), FractionalLit (..)
     , FractionalExponentBase (..)
     )
-import GHC.Data.FastString (FastString, unpackFS, mkFastString)
-import Language.Haskell.Syntax.Module.Name (moduleNameString)
-import Language.Haskell.Syntax.Extension (noExtField)
+import GHC.Data.FastString (unpackFS, mkFastString)
+import Language.Haskell.Syntax.Module.Name ()
+import Language.Haskell.Syntax.Extension ()
 import GHC.Utils.Outputable (showSDocUnsafe, ppr)
 import System.Process (readProcess)
 
 import Language.Haskell.GHC.ExactPrint (exactPrint)
 import Language.Haskell.GHC.ExactPrint.Parsers (parseModuleFromString)
+import Language.Haskell.GHC.ExactPrint.Transform (setEntryDP, transferEntryDP)
 
 import Test.MuCheck.Config
 import Test.MuCheck.MuOp
@@ -55,7 +56,7 @@ rdrStr = occNameString . rdrNameOcc
 
 -- | Create a located expression node with empty annotation.
 -- The entry delta will be repaired by '(~~>)' via 'transferEntry'.
-mkL :: NoAnn (EpAnn ann) => a -> GenLocated (EpAnn ann) a
+mkL :: NoAnn ann => a -> GenLocated (EpAnn ann) a
 mkL = L noAnn
 
 -- | Create a located expression wrapping an 'HsExpr'.
@@ -72,9 +73,10 @@ mkDataVar :: String -> LHsExpr GhcPs
 mkDataVar s = mkL (HsVar noExtField (L noAnn (mkRdrUnqual (mkDataOcc s))))
 
 -- | Create a function application expression.
--- XApp GhcPs = NoExtField.
+-- XApp GhcPs = NoExtField.  The argument is given a one-space entry delta so
+-- that 'exactPrint' renders "f x" rather than "fx".
 mkApp :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-mkApp f e = mkL (HsApp noExtField f e)
+mkApp f e = mkL (HsApp noExtField f (setEntryDP e (SameLine 1)))
 
 -- | Create an operator application expression.
 -- XOpApp GhcPs = NoExtField.
@@ -115,10 +117,15 @@ mkFracLitExpr f = mkL (HsOverLit noExtField overlit)
 mkStringExpr :: String -> LHsExpr GhcPs
 mkStringExpr s = mkL (HsLit noExtField (HsString NoSourceText (mkFastString s)))
 
--- | Create an empty list expression.
--- XExplicitList GhcPs = AnnList (); NoAnn (AnnList ()) holds.
+-- | Create an empty list expression @[]@.
+-- We provide explicit bracket tokens so that 'exactPrint' emits @[]@ rather
+-- than the empty string that results from @noAnn :: AnnList ()@.
 mkListExpr :: LHsExpr GhcPs
-mkListExpr = mkL (ExplicitList (noAnn :: AnnList ()) [])
+mkListExpr = mkL (ExplicitList ann [])
+  where
+    epTok d = EpTok (EpaDelta generatedSrcSpan d [])
+    ann = (noAnn :: AnnList ())
+            { al_brackets = ListSquare (epTok (SameLine 0)) (epTok (SameLine 0)) }
 
 -- ---------------------------------------------------------------------------
 -- Public API
@@ -157,9 +164,9 @@ genMutantsWith config filename tix = do
 
 -- | Remove mutants not covered by any test.
 removeUncovered :: [Span] -> [Mutant] -> [Mutant]
-removeUncovered uspans = filter isCovered
+removeUncovered uspans = filter mutantIsCovered
   where
-    isCovered Mutant{..} = not $ any (insideSpan _mspan) uspans
+    mutantIsCovered Mutant{..} = not $ any (insideSpan _mspan) uspans
 
 -- | Get the module name from a parsed AST.
 getModuleName :: Module_ -> String
@@ -189,13 +196,17 @@ genMutantsWithExtra ::
 genMutantsWithExtra config extraSels origAst =
     nubBy (\a b -> _mutant a == _mutant b) $
         filter (\m -> _mutant m /= origStr) $
-            map (toMutant . apTh (exactPrint . withAnn)) $
-                programMutantsWith config extraSels ast
+            map (toMutant . apTh exactPrint) $
+                nubBy (\(v1,s1,_) (v2,s2,_) -> v1==v2 && s1==s2)
+                    (mutatesN ops origAst 1)
   where
-    (onlyAnn, noAnnDecls) = splitAnnotations origAst
-    ast        = putDecl origAst noAnnDecls
-    withAnn ma = putDecl ma $ getDecl ma ++ onlyAnn
-    origStr    = exactPrint (withAnn ast)
+    -- Generate ops only from non-test declarations (to avoid mutating the test
+    -- harness), but apply them to the full module so exactPrint can use every
+    -- declaration's original EpAnn delta positions.
+    (_, noAnnDecls) = splitAnnotations origAst
+    opsAst  = putDecl origAst noAnnDecls
+    ops     = applicableOps config opsAst ++ concatMap ($ opsAst) extraSels
+    origStr = exactPrint origAst
 
 -- | Produce all mutants using the default operator list.
 programMutants :: Config -> Module_ -> [(MuVar, Span, Module_)]
@@ -389,42 +400,42 @@ selectLiteralOps m = selectLitOps m ++ selectBLitOps m
 
 -- | Mutations of monomorphic and overloaded numeric/char/string literals.
 selectLitOps :: Module_ -> [MuOp]
-selectLitOps m = selectValOps isLitExpr convertLit m
+selectLitOps m = selectValOps isLitExpr toLitVariants m
   where
     isLitExpr :: LHsExpr GhcPs -> Bool
     isLitExpr (L _ (HsLit _ _))     = True
     isLitExpr (L _ (HsOverLit _ _)) = True
     isLitExpr _                     = False
 
-    convertLit :: LHsExpr GhcPs -> [LHsExpr GhcPs]
+    toLitVariants :: LHsExpr GhcPs -> [LHsExpr GhcPs]
     -- Monomorphic integer prims
-    convertLit (L _ (HsLit _ (HsIntPrim _ n))) =
+    toLitVariants (L _ (HsLit _ (HsIntPrim _ n))) =
         map mkL [HsLit noExtField (HsIntPrim NoSourceText v) | v <- nub [n+1, n-1, 0, 1], v /= n]
-    convertLit (L _ (HsLit _ (HsWordPrim _ n))) =
+    toLitVariants (L _ (HsLit _ (HsWordPrim _ n))) =
         map mkL [HsLit noExtField (HsWordPrim NoSourceText v) | v <- nub [n+1, n-1, 0, 1], v /= n]
     -- Monomorphic char
-    convertLit (L _ (HsLit _ (HsChar _ c))) =
+    toLitVariants (L _ (HsLit _ (HsChar _ c))) =
         map mkL [HsLit noExtField (HsChar NoSourceText v) | v <- [pred c, succ c]]
-    convertLit (L _ (HsLit _ (HsCharPrim _ c))) =
+    toLitVariants (L _ (HsLit _ (HsCharPrim _ c))) =
         map mkL [HsLit noExtField (HsCharPrim NoSourceText v) | v <- [pred c, succ c]]
     -- Monomorphic string
-    convertLit (L _ (HsLit _ (HsString _ _))) =
+    toLitVariants (L _ (HsLit _ (HsString _ _))) =
         [mkL (HsLit noExtField (HsString NoSourceText (mkFastString "")))]
-    convertLit (L _ (HsLit _ (HsStringPrim _ _))) =
+    toLitVariants (L _ (HsLit _ (HsStringPrim _ _))) =
         [mkL (HsLit noExtField (HsString NoSourceText (mkFastString "")))]
     -- Overloaded integer (Num): reuse the original ol_ext field for annotation fidelity
-    convertLit (L _ (HsOverLit _ ol@OverLit{ ol_val = HsIntegral il })) =
+    toLitVariants (L _ (HsOverLit _ ol@OverLit{ ol_val = HsIntegral il })) =
         let n = il_value il
             vals = nub [n+1, n-1, 0, 1]
         in [ mkL (HsOverLit noExtField ol{ ol_val = HsIntegral il{ il_value = v, il_text = SourceText (mkFastString (show v)) } })
            | v <- vals ]
     -- Overloaded fractional (Fractional)
-    convertLit (L _ (HsOverLit _ ol@OverLit{ ol_val = HsFractional fl })) =
+    toLitVariants (L _ (HsOverLit _ ol@OverLit{ ol_val = HsFractional fl })) =
         let f = fl_signi fl
             vals = nub [f+1, f-1, 0, 1]
         in [ mkL (HsOverLit noExtField ol{ ol_val = HsFractional fl{ fl_signi = v } })
            | v <- vals ]
-    convertLit _ = []
+    toLitVariants _ = []
 
 -- | Mutations of boolean literals (@True@ ↔ @False@).
 selectBLitOps :: Module_ -> [MuOp]
@@ -464,12 +475,10 @@ selectGuardedBoolNegOps m = selectValOps isMatchWithGuards convert m
     isMatchWithGuards :: Alt_ -> Bool
     isMatchWithGuards (L _ (Match _ _ _ (GRHSs _ grhss _))) =
         any hasNonOtherwiseGuard grhss
-    isMatchWithGuards _ = False
 
     hasNonOtherwiseGuard :: GuardedRhs_ -> Bool
     hasNonOtherwiseGuard (L _ (GRHS _ stmts _)) =
         any (not . isOtherwiseStmt) stmts && not (null stmts)
-    hasNonOtherwiseGuard _ = False
 
     isOtherwiseStmt :: ExprLStmt GhcPs -> Bool
     isOtherwiseStmt (L _ (BodyStmt _ (L _ (HsVar _ (L _ rdr))) _ _)) =
@@ -477,19 +486,17 @@ selectGuardedBoolNegOps m = selectValOps isMatchWithGuards convert m
     isOtherwiseStmt _ = False
 
     convert :: Alt_ -> [Alt_]
-    convert (L la (Match xm ctx pats (GRHSs xg grhss binds))) =
+    convert (L _ (Match xm ctx pats (GRHSs xg grhss binds))) =
         [ mkL (Match xm ctx pats (GRHSs xg (replaceAt i grhs' grhss) binds))
         | (i, grhs) <- zip [0..] grhss
         , grhs' <- convertGrhs grhs
         ]
-    convert _ = []
 
     convertGrhs :: GuardedRhs_ -> [GuardedRhs_]
     convertGrhs (L lg (GRHS x stmts body)) =
         [ L lg (GRHS x stmts' body)
         | stmts' <- once (mkMp boolNegate) stmts
         ]
-    convertGrhs _ = []
 
     boolNegate :: ExprLStmt GhcPs -> [ExprLStmt GhcPs]
     boolNegate s | isOtherwiseStmt s = []
@@ -510,12 +517,19 @@ selectFnMatches m = selectValOps isFunDecl convert m
 
     convert :: Decl_ -> [Decl_]
     convert (L _ (ValD xv (FunBind xb fid (MG xmg (L lms ms))))) =
-        -- Match doesn't have Eq; identity mutations are filtered later by
-        -- the exactPrint-based dedup in genMutantsWithExtra.
-        [ mkL (ValD xv (FunBind xb fid (MG xmg (L lms ms'))))
+        -- Re-assign each match's entry delta from the corresponding original
+        -- position so that exactPrint places clauses on the correct lines
+        -- whether we reorder or remove them.
+        [ mkL (ValD xv (FunBind xb fid (MG xmg (L lms (fixEntries ms ms')))))
         | ms' <- permutations ms ++ removeOneElem ms
         ]
     convert _ = []
+
+    -- Copy each original match's leading-whitespace delta to the match at the
+    -- same position in the modified list.  This ensures correctness for both
+    -- clause removal (ms' shorter than ms) and reordering.
+    fixEntries :: [Alt_] -> [Alt_] -> [Alt_]
+    fixEntries origMs newMs = zipWith transferEntryDP origMs newMs
 
 -- ---------------------------------------------------------------------------
 -- Function / operator substitution
@@ -635,11 +649,9 @@ selectCaseDefaultRemoveOps m = caseAltDefault m ++ guardDefault m
     isMatchWithDefaultGuard :: Alt_ -> Bool
     isMatchWithDefaultGuard (L _ (Match _ _ _ (GRHSs _ grhss _))) =
         any isDefaultGRHS grhss && length grhss > 1
-    isMatchWithDefaultGuard _ = False
 
     isDefaultGRHS :: GuardedRhs_ -> Bool
     isDefaultGRHS (L _ (GRHS _ stmts _)) = any isOtherwiseStmt stmts
-    isDefaultGRHS _ = False
 
     isOtherwiseStmt :: ExprLStmt GhcPs -> Bool
     isOtherwiseStmt (L _ (BodyStmt _ (L _ (HsVar _ (L _ rdr))) _ _)) =
@@ -647,9 +659,8 @@ selectCaseDefaultRemoveOps m = caseAltDefault m ++ guardDefault m
     isOtherwiseStmt _ = False
 
     convertMatchDefault2 :: Alt_ -> [Alt_]
-    convertMatchDefault2 (L la (Match xm ctx pats (GRHSs xg grhss binds))) =
+    convertMatchDefault2 (L _ (Match xm ctx pats (GRHSs xg grhss binds))) =
         [mkL (Match xm ctx pats (GRHSs xg (filter (not . isDefaultGRHS) grhss) binds))]
-    convertMatchDefault2 _ = []
 
 -- ---------------------------------------------------------------------------
 -- Do-block mutations
@@ -754,11 +765,12 @@ selectRemoveWhereBindingOps m =
     convertFun _ = []
 
     convertMatch :: Alt_ -> [Alt_]
-    convertMatch (L _ (Match xm ctx pats (GRHSs xg grhss (HsValBinds xv (ValBinds xvb bag sigs))))) =
-        let bs = bag
-        in [ mkL (Match xm ctx pats (GRHSs xg grhss (HsValBinds xv (ValBinds xvb (bs') sigs))))
-           | bs' <- removeOneElem bs
-           ]
+    -- Preserve the outer 'L la' annotation so exactPrint knows where to place
+    -- the match after the where-binding is removed.
+    convertMatch (L la (Match xm ctx pats (GRHSs xg grhss (HsValBinds xv (ValBinds xvb bag sigs))))) =
+        [ L la (Match xm ctx pats (GRHSs xg grhss (HsValBinds xv (ValBinds xvb bs' sigs))))
+        | bs' <- removeOneElem bag
+        ]
     convertMatch _ = []
 
     isPatWithWhere :: Decl_ -> Bool
@@ -788,6 +800,12 @@ selectRemoveSelfAssignOps m =
     isLetWithSelf _ = False
 
     isSelfAssignBind :: LHsBind GhcPs -> Bool
+    -- GHC parses `x = x` in let-bindings as FunBind (function with no patterns).
+    isSelfAssignBind (L _ (FunBind _ (L _ rdr1)
+                           (MG _ (L _ [L _ (Match _ _ (L _ [])
+                               (GRHSs _ [L _ (GRHS _ [] (L _ (HsVar _ (L _ rdr2))))] _))])))) =
+        rdrStr rdr1 == rdrStr rdr2
+    -- Fallback: PatBind-style variable binding `x = x`.
     isSelfAssignBind (L _ (PatBind _ (L _ (VarPat _ (L _ rdr1)))
                            _mult
                            (GRHSs _ [L _ (GRHS _ [] (L _ (HsVar _ (L _ rdr2))))] _))) =
@@ -830,7 +848,13 @@ selectNegateLiteralOps m = selectValOps isPosLit convert m
     isPosLit _ = False
 
     convert :: LHsExpr GhcPs -> [LHsExpr GhcPs]
-    convert e = [mkApp (mkVar "negate") e]
+    -- Build a fresh literal so the argument does not carry its original source
+    -- positions, which would corrupt exactPrint when wrapped in `negate`.
+    convert (L _ (HsOverLit _ OverLit{ol_val = HsIntegral il})) =
+        [mkApp (mkVar "negate") (mkIntLitExpr (il_value il))]
+    convert (L _ (HsOverLit _ OverLit{ol_val = HsFractional fl})) =
+        [mkApp (mkVar "negate") (mkFracLitExpr (fl_signi fl))]
+    convert _ = []
 
 -- ---------------------------------------------------------------------------
 -- String literal mutation
@@ -1007,7 +1031,7 @@ selectZeroReturnOps m =
     -- XValD GhcPs = NoExtField; XFunBind = NoExtField.
     -- Eq (Match GhcPs) doesn't exist; identity mutations filtered by genMutantsWithExtra.
     [ fromDecl ==> mkL (ValD noExtField (FunBind noExtField fid mg'))
-    | fromDecl@(L _ (ValD _ (FunBind _ fid mg@(MG xmg (L lms ms))))) <- decls
+    | fromDecl@(L _ (ValD _ (FunBind _ fid (MG xmg (L lms ms))))) <- decls
     , let fname = occNameString (rdrNameOcc (unLoc fid))
     , Just retTy <- [lookup fname typeSigs]
     , Just zv    <- [typeZeroVal retTy]
@@ -1044,7 +1068,9 @@ selectZeroReturnOps m =
     typeZeroVal _ = Nothing
 
     replaceMatchBody :: LHsExpr GhcPs -> Alt_ -> Alt_
-    replaceMatchBody zv (L la (Match xm ctx pats (GRHSs xg _ binds))) =
+    -- Preserve the first GRHS's located annotation (which encodes the `=`
+    -- position) so exactPrint can render "= zv" correctly.
+    replaceMatchBody zv (L la (Match xm ctx pats (GRHSs xg (L lg (GRHS xga _ _):_) binds))) =
         L la (Match xm ctx pats
-               (GRHSs xg [mkL (GRHS noAnn [] zv)] binds))
+               (GRHSs xg [L lg (GRHS xga [] (setEntryDP zv (SameLine 1)))] binds))
     replaceMatchBody _ a = a

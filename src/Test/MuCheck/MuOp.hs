@@ -29,7 +29,7 @@ import Control.Monad (MonadPlus, mzero)
 import qualified Data.Generics as G
 
 import GHC.Hs
-import GHC.Parser.Annotation (HasLoc (..), EpAnn)
+import GHC.Parser.Annotation ()
 import GHC.Types.SrcLoc
     ( GenLocated (..), SrcSpan (..)
     , srcLocLine, srcLocCol
