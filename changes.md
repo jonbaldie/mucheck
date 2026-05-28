@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.19]
+  * Fixed: HPC module name lookup to correctly handle package/target prefixes
+  * Fixed: HPC .mix file loading robustness for flattened .hpc directories (common in CI)
+  * Refactored: `removeRedundantSpans` for better robustness
+  * Improved: MSI accuracy by correctly identifying uncovered code (example MSI improved from 59% to 76%)
+
 ## [0.4.18]
   * Add `exclude_dirs` config key: list of path prefixes; skip mutation if the target file path starts with any listed prefix
   * Add `genMutantsWithExtra` API in `Test.MuCheck.Mutation`: accepts additional custom `(MuVar, Module_ -> [MuOp])` selector functions for third-party mutators without forking
