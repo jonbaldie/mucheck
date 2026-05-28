@@ -1,6 +1,7 @@
 # Changelog
 
 ## [0.5.3]
+  * Fixed: replaced the line-based worker IPC protocol (`workerSerialize`/`workerDeserialize`) with a self-contained JSON object; a single extra newline inside a mutant diff or test output could corrupt the line-based deserialiser; JSON handles embedded newlines safely; a `version` field is included for future schema evolution; verified correct results with `--workers 2` against `Examples/AssertCheckTest.hs`
   * Changed: migrated AST backend from `haskell-src-exts` to the GHC API (`ghc` + `ghc-exactprint >= 1.12`); the parser now uses GHC 9.12's actual parser so all language extensions (`LambdaCase`, `TypeFamilies`, `GADTs`, `LinearTypes`, etc.) are supported; previously any source using an unsupported extension was silently parsed as empty and produced zero mutants
   * Changed: `getASTFromStr` now returns `IO (Either String Module_)` instead of `Either String Module`; callers updated throughout the library and CLI; the `ghc --print-libdir` call is made once per parse, not once per run
   * Changed: mutant serialisation changed from `haskell-src-exts`'s `prettyPrint` to `ghc-exactprint`'s `exactPrint`; unchanged source regions are preserved exactly; several mutators (`negate-literal`, `zero-return`, `pattern-match`, `remove-where-binding`) were updated to emit correct `EpAnn` delta annotations so `exactPrint` produces compilable output
