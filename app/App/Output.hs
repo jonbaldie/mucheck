@@ -186,7 +186,7 @@ writeAgenticJsonLogger opts file origSrc tsum msum = case optLoggerAgenticJson o
                  else 0.0
         resultOf (MSumKilled  _ _)   = "killed"  :: String
         resultOf (MSumAlive   _ _)   = "alive"
-        resultOf (MSumError   _ _ _) = "error"
+        resultOf MSumError{}         = "error"
         resultOf (MSumSkipped _ _)   = "skipped"
         resultOf (MSumOther   _ _)   = "other"
         mutOf (MSumKilled  m _)   = m

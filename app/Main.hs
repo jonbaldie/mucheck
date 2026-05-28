@@ -30,6 +30,7 @@ import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Exception (IOException, try)
 import Control.Monad (unless, when)
 import Data.IORef (modifyIORef', newIORef, readIORef)
+import Data.Maybe (fromMaybe)
 import Data.List (group, isSuffixOf, isPrefixOf, sort, sortBy)
 import Data.Ord (comparing, Down(..))
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
@@ -114,7 +115,7 @@ runOpts opts
         filtered4 <- applyDiffLines (optFile opts) (optGitDiffBase opts) (optGitDiffLines opts) filtered3
         let filtered5 = applyIgnoreLines origSrc (optIgnoreLines opts) filtered4
             preFilter = applyRunMutantId (optRunMutantId opts) filtered5
-            maxN      = maybe (maxNumMutants defaultConfig) id (optMaxMutants opts)
+            maxN      = fromMaybe (maxNumMutants defaultConfig) (optMaxMutants opts)
         finalMutants <- sampler (defaultConfig { maxNumMutants = maxN }) preFilter
         let tests = map (genTest modFile)
         testRes <- getAllTests (getName modFile)

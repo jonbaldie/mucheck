@@ -5,6 +5,7 @@ module App.Exit
   ) where
 
 import Control.Monad (when)
+import Data.Maybe (isJust)
 import System.Exit (ExitCode(..), exitWith)
 
 import App.Opts (Opts(..))
@@ -12,7 +13,7 @@ import Test.MuCheck.AnalysisSummary (MAnalysisSummary(..))
 
 -- | True when --run-mutant-id is set (single-mutant mode skips aggregate output).
 isSingleMutantMode :: Opts -> Bool
-isSingleMutantMode = maybe False (const True) . optRunMutantId
+isSingleMutantMode = isJust . optRunMutantId
 
 -- | Apply MSI quality gates and --fail-on-escaped; exit with the appropriate code on failure.
 applyExitPolicy :: Opts -> MAnalysisSummary -> IO ()
