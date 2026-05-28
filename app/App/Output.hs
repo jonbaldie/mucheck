@@ -258,12 +258,12 @@ buildHtmlReport file origSrc tsum msum =
       escChar c   = [c]
       statusClass (MSumKilled  _ _)   = "killed"  :: String
       statusClass (MSumAlive   _ _)   = "alive"
-      statusClass (MSumError   _ _ _) = "error"
+      statusClass MSumError{}         = "error"
       statusClass (MSumSkipped _ _)   = "skipped"
       statusClass (MSumOther   _ _)   = "other"
       statusLabel (MSumKilled  _ _)   = "KILLED"  :: String
       statusLabel (MSumAlive   _ _)   = "ALIVE"
-      statusLabel (MSumError   _ _ _) = "ERROR"
+      statusLabel MSumError{}         = "ERROR"
       statusLabel (MSumSkipped _ _)   = "SKIPPED"
       statusLabel (MSumOther   _ _)   = "OTHER"
       mutOf (MSumKilled  m _)   = m; mutOf (MSumAlive   m _)   = m
@@ -336,7 +336,7 @@ printMutatorBreakdown _opts sums = do
       mutOf (MSumOther   m _)   = m
       isKilled  (MSumKilled  _ _)   = True; isKilled  _ = False
       isAlive   (MSumAlive   _ _)   = True; isAlive   _ = False
-      isErr     (MSumError   _ _ _) = True; isErr     _ = False
+      isErr     MSumError{}          = True; isErr     _ = False
       isSkipped (MSumSkipped _ _)   = True; isSkipped _ = False
       mutype    = showMuVar . _mtype . mutOf
       types     = sort . nub $ map mutype sums
@@ -364,7 +364,7 @@ printMutantDetails opts origSrc sums = do
                            Just chars -> case s of
                              MSumKilled  _ _   -> 'k' `elem` chars
                              MSumAlive   _ _   -> 'a' `elem` chars
-                             MSumError   _ _ _ -> 'e' `elem` chars
+                             MSumError{}       -> 'e' `elem` chars
                              MSumSkipped _ _   -> 's' `elem` chars
                              MSumOther   _ _   -> 'k' `elem` chars
       shouldShowQuiet s = not (optQuiet opts) || case s of { MSumAlive _ _ -> True; _ -> False }
