@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.8]
+  * Added: `setups/` directory with ready-to-use GitHub Actions workflow, GitLab CI job, and three `.mucheck.yaml` templates (conservative, strict, diff-only)
+  * Changed: README rewritten with plain-language explanation of why mutation testing matters, concrete examples of AI-generated test patterns that escape mutation, covered-MSI guidance, and a get-started section
+  * Fixed: CLAUDE.md shipping workflow updated to prevent recurring version revert: version bump now required in the PR itself, and agents must branch from `origin/master` before doing any work
+
 ## [0.5.7]
   * Added: `&&`/`||` logical operator swap and `foldl`/`foldr` fold-direction swap to default function substitution groups
   * Added: 8 new dedicated mutation operators — `list-literal` (empty or shrink explicit list literals), `bind-to-sequence` (wildcard monadic binds), `pattern-constructor` (flip `Just`/`Nothing`, `Left`/`Right`, `True`/`False` in patterns), `append-strip` (drop one side of `++`), `flip-args` (swap arguments of known binary functions such as `compare`, `div`, `elem`), `seq-strip` (remove `seq x y` → `y`), `tuple-swap` (swap pair components), `ordering-literal` (flip `GT`↔`LT`, replace `EQ`)
@@ -13,9 +18,6 @@
   * Changed: Haddock pages deployment now passes `--haddock-hyperlinked-source` so each identifier in the hosted docs links to a syntax-highlighted source view
 
 ## [0.5.4]
-  * Fixed: `selectRemoveStmtOps` no longer applies to list comprehensions (`HsDo ListComp`); the previous `isValidDo` check incorrectly allowed removing the mandatory result `LastStmt` from a comprehension, leaving a body-less comprehension that triggered a GHC 9.12.1 `pprComp` panic; `isDo` is now restricted to `DoExpr`/`MDoExpr` only
-  * Fixed: `--noop` pre-flight failure now prints the actual interpreter error to stderr so users can diagnose test format problems (e.g. wrong return type, missing imports) instead of receiving only the generic "test suite does not pass" message
-  * Fixed: `--help` footer now uses `footerDoc`/`vsep` so mutator names and exit codes render as structured lines instead of a single reflowed paragraph
 
 ## [0.5.3]
   * Fixed: replaced the line-based worker IPC protocol (`workerSerialize`/`workerDeserialize`) with a self-contained JSON object; a single extra newline inside a mutant diff or test output could corrupt the line-based deserialiser; JSON handles embedded newlines safely; a `version` field is included for future schema evolution; verified correct results with `--workers 2` against `Examples/AssertCheckTest.hs`
