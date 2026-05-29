@@ -18,6 +18,9 @@
   * Changed: Haddock pages deployment now passes `--haddock-hyperlinked-source` so each identifier in the hosted docs links to a syntax-highlighted source view
 
 ## [0.5.4]
+  * Fixed: `selectRemoveStmtOps` no longer applies to list comprehensions (`HsDo ListComp`); the previous `isValidDo` check incorrectly allowed removing the mandatory result `LastStmt` from a comprehension, leaving a body-less comprehension that triggered a GHC 9.12.1 `pprComp` panic; `isDo` is now restricted to `DoExpr`/`MDoExpr` only
+  * Fixed: `--noop` pre-flight failure now prints the actual interpreter error to stderr so users can diagnose test format problems (e.g. wrong return type, missing imports) instead of receiving only the generic "test suite does not pass" message
+  * Fixed: `--help` footer now uses `footerDoc`/`vsep` so mutator names and exit codes render as structured lines instead of a single reflowed paragraph
 
 ## [0.5.3]
   * Fixed: replaced the line-based worker IPC protocol (`workerSerialize`/`workerDeserialize`) with a self-contained JSON object; a single extra newline inside a mutant diff or test output could corrupt the line-based deserialiser; JSON handles embedded newlines safely; a `version` field is included for future schema evolution; verified correct results with `--workers 2` against `Examples/AssertCheckTest.hs`
